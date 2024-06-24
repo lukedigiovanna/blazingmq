@@ -20,7 +20,6 @@
 // MQB
 #include <mqbblp_storagemanager.h>
 #include <mqbc_clusterutil.h>
-#include <mqbc_controlmessagetransmitter.h>
 #include <mqbc_storagemanager.h>
 #include <mqbc_storageutil.h>
 #include <mqbcmd_humanprinter.h>
@@ -2934,11 +2933,15 @@ void Cluster::processControlMessage(
     } break;  // BREAK
     case MsgChoice::SELECTION_ID_ADMIN_COMMAND: {
         BALL_LOG_INFO << "Received admin command through Control Message API";
-        const bsl::string& cmd = message.choice().adminCommand().command();
+        const bmqp_ctrlmsg::AdminCommand& adminCommand =
+            message.choice().adminCommand();
+        const bsl::string& cmd      = adminCommand.command();
+        const bool         rerouted = adminCommand.rerouted();
         BALL_LOG_INFO << cmd;
+        BALL_LOG_INFO << rerouted;
         // do we need to dispatch this?. or is the admin cb already
         // invoking a dispatch event?
-        d_adminCb("reroute",
+        d_adminCb(source->hostName(),
                   cmd,
                   bdlf::BindUtil::bind(&Cluster::onProcessedAdminCommand,
                                        this,
@@ -2950,13 +2953,8 @@ void Cluster::processControlMessage(
     case MsgChoice::SELECTION_ID_ADMIN_COMMAND_RESPONSE: {
         BALL_LOG_INFO
             << "Received admin command response through Control Message API";
-        BALL_LOG_INFO << description() << ": " << message;
-        // const bmqp_ctrlmsg::AdminCommandResponse& response =
-        // message.choice().adminCommandResponse();
-        // TODO: trigger response callback? how does this work in the first
-        // place?
         requestManager().processResponse(message);
-    }
+    } break;
     case MsgChoice::SELECTION_ID_UNDEFINED:
     default: {
         MWCTSK_ALARMLOG_ALARM("CLUSTER")
@@ -3600,20 +3598,7 @@ void Cluster::onProcessedAdminCommand(
 
     response.choice().adminCommandResponse().text() = res;
 
-    // dispatcher()->execute(
-    //     bdlf::BindUtil::bind(
-    //         &mqbc::ControlMessageTransmitter::send,
-    //         &d_clusterData.messageTransmitter(),
-    //         response,
-    //         source),
-    //     this);
     d_clusterData.messageTransmitter().sendMessageSafe(response, source);
-
-    // need to do something about "schema event builder" thingy whatever
-
-    // TODO: look at mqba_adminsession.cpp to see how to implement this!
-
-    // bmqp::SchemaEventBuilder schemaEventBuilder;
 }
 
 void Cluster::loadClusterStatus(mqbcmd::ClusterResult* result)
@@ -3735,17 +3720,20 @@ void Cluster::processResponse(const bmqp_ctrlmsg::ControlMessage& response)
         this);
 }
 
-void Cluster::getPrimaryNodes(bsl::list<mqbnet::ClusterNode*>& outNodes,
-                              bool& outIsSelfPrimary) const
+void Cluster::getPrimaryNodes(bsl::vector<mqbnet::ClusterNode*>* outNodes,
+                              bool* outIsSelfPrimary) const
 {
+    // PRECONDITIONS
+    BSLS_ASSERT_SAFE(outNodes);
+    BSLS_ASSERT_SAFE(outIsSelfPrimary);
     BSLS_ASSERT_SAFE(dispatcher()->inDispatcherThread(this));
 
     const mqbnet::Cluster::NodesList&         nodes = netCluster().nodes();
     const mqbc::ClusterState::PartitionsInfo& partitionsInfo =
         d_state.partitionsInfo();
 
-    outIsSelfPrimary = false;
-    outNodes.clear();
+    *outIsSelfPrimary = false;
+    outNodes->clear();
 
     for (mqbc::ClusterState::PartitionsInfo::const_iterator pit =
              partitionsInfo.begin();
@@ -3759,15 +3747,15 @@ void Cluster::getPrimaryNodes(bsl::list<mqbnet::ClusterNode*>& outNodes,
             // Check if this node is the primary for this partition
             if (pit->primaryNodeId() == node->nodeId()) {
                 // If we already added this node, then don't add a duplicate
-                if (bsl::find(outNodes.begin(), outNodes.end(), node) !=
-                    outNodes.end()) {
+                if (bsl::find(outNodes->begin(), outNodes->end(), node) !=
+                    outNodes->end()) {
                     continue;
                 }
                 if (d_state.isSelfPrimary(pit->partitionId())) {
-                    outIsSelfPrimary = true;
+                    *outIsSelfPrimary = true;
                     continue;
                 }
-                outNodes.push_back(node);
+                outNodes->push_back(node);
                 foundPrimary = true;
                 break;
             }
