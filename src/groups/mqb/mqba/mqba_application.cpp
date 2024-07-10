@@ -564,7 +564,8 @@ Application::getRelevantCluster(const mqbcmd::CommandChoice& command,
     return nullptr;
 }
 
-int Application::executeCommand(const mqbcmd::CommandChoice& command,
+int Application::executeCommand(const mqbcmd::Command& commandWithOptions,
+                                const mqbcmd::CommandChoice& command,
                                 mqbcmd::InternalResult*      cmdResult)
 {
     BSLS_ASSERT_SAFE(cmdResult);
@@ -748,7 +749,7 @@ int Application::processCommand(const bslstl::StringRef& source,
 
     // easy path, just execute the command
     if (fromReroute) {
-        if (executeCommand(command, &cmdResult)) {
+        if (executeCommand(commandWithOptions, command, &cmdResult)) {
             return 0;  // early exit (caused by "dangerous" command)
         }
         printCommandResult(cmdResult, commandWithOptions.encoding(), os);
@@ -772,7 +773,7 @@ int Application::processCommand(const bslstl::StringRef& source,
     }
 
     if (shouldSelfExecute) {
-        if (executeCommand(command, &cmdResult)) {
+        if (executeCommand(commandWithOptions, command, &cmdResult)) {
             return 0;  // early exit (caused by "dangerous" command)
         }
     }
