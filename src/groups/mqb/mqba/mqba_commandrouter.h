@@ -23,8 +23,6 @@
 //@CLASSES:
 //  mqbcmd::CommandRouter: Manages routing admin commands
 //
-//@DESCRIPTION:
-//
 
 // BSL
 #include <bsl_iostream.h>

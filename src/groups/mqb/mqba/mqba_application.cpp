@@ -535,11 +535,12 @@ Application::getRelevantCluster(const mqbcmd::CommandChoice& command,
 
         // attempt to locate the domain
         bsl::shared_ptr<mqbi::Domain> domainSp;
-        if (d_domainManager_mp->locateDomain(&domainSp, domainName) != 0) {
+        if (0 !=
+            d_domainManager_mp->locateOrCreateDomain(&domainSp, domainName)) {
             mwcu::MemOutStream os;
             os << "Domain '" << domainName << "' doesn't exist";
             cmdResult->makeError().message() = os.str();
-            return nullptr;
+            return nullptr;  // RETURN
         }
 
         return domainSp->cluster();
