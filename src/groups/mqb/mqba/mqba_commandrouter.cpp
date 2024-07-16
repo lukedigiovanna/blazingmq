@@ -69,6 +69,9 @@ RouteCommandManager::AllPartitionPrimariesRoutingMode::getRouteMembers(
     NodesVector primaryNodes;
     bool        isSelfPrimary;
 
+    bool success;
+
+    // todo: add some way to know if "getPrimaryNodes" failed. (another out parameter?)
     cluster->dispatcher()->execute(
         bdlf::BindUtil::bind(&mqbi::Cluster::getPrimaryNodes,
                              cluster,
