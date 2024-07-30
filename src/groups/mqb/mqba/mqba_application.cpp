@@ -142,6 +142,11 @@ Application::Application(bdlmt::EventScheduler* scheduler,
                        1,
                        bsls::TimeInterval(120).totalMilliseconds(),
                        allocator)
+, d_adminRerouteExecutionPool(mwcsys::ThreadUtil::defaultAttributes(),
+                              0,
+                              1,
+                              bsls::TimeInterval(120).totalMilliseconds(),
+                              allocator)
 , d_bufferFactory(k_BLOBBUFFER_SIZE, d_allocators.get("BufferFactory"))
 , d_blobSpPool(bdlf::BindUtil::bind(&createBlob,
                                     &d_bufferFactory,
@@ -416,6 +421,11 @@ int Application::start(bsl::ostream& errorDescription)
         return (rc * 100) + rc_ADMIN_POOL_START_FAILURE;  // RETURN
     }
 
+    rc = d_adminRerouteExecutionPool.start();
+    if (rc != 0) {
+        return (rc * 100) + rc_ADMIN_POOL_START_FAILURE;  // RETURN
+    }
+
     BALL_LOG_INFO << "BMQbrkr started successfully";
 
     return rc_SUCCESS;
@@ -468,6 +478,9 @@ void Application::stop()
 
     BALL_LOG_INFO << "Stopping admin thread pool...";
     d_adminExecutionPool.stop();
+
+    BALL_LOG_INFO << "Stopping admin reroute thread pool...";
+    d_adminRerouteExecutionPool.stop();
 
     // NOTE: Once we no longer call 'channel->close()' here,
     //       'mqbnet::TCPSessionFactory::stopListening' should be revisited
@@ -823,12 +836,15 @@ int Application::enqueueCommand(
     const bsl::function<void(int, const bsl::string&)>& onProcessedCb,
     bool                                                fromReroute)
 {
+    bdlmt::ThreadPool* threadPool = fromReroute ? &d_adminRerouteExecutionPool
+                                                : &d_adminExecutionPool;
+
     BALL_LOG_TRACE << "Enqueuing admin command '" << cmd
                    << "' [source: " << source
                    << "] to the execution pool [numPendingJobs: "
-                   << d_adminExecutionPool.numPendingJobs() << "]";
+                   << threadPool->numPendingJobs() << "]";
 
-    return d_adminExecutionPool.enqueueJob(
+    return threadPool->enqueueJob(
         bdlf::BindUtil::bind(&Application::processCommandCb,
                              this,
                              source,
